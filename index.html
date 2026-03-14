@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IIIF Exhibition Framework — The Wolfsonian</title>
+
+<!--
+=================================================================
+  IIIF DIGITAL EXHIBITION FRAMEWORK
+  How to use:
+  1. Edit section text directly in the HTML below
+  2. Set data-manifest="YOUR_MANIFEST_URL" on each .osd-viewer div
+  3. Update the matching toolbar href and caption__manifest href too
+  4. Run via local server: python3 -m http.server 8000
+  5. Open http://localhost:8000/iiif-exhibition-framework.html
+=================================================================
+-->
+
+<script src="https://cdn.jsdelivr.net/npm/openseadragon@4.1.0/build/openseadragon/openseadragon.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+:root {
+  --bg:     #000;
+  --fg:     #fff;
+  --muted:  #888;
+  --dim:    #444;
+  --rule:   rgba(255,255,255,0.12);
+  --vbg:    #0d0d0d;
+  --sans:   'Plus Jakarta Sans', sans-serif;
+  --mono:   'DM Mono', monospace;
+  --gap:    clamp(1.5rem, 5vw, 4rem);
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-weight: 300;
+  font-size: clamp(0.9rem, 1.4vw, 1rem);
+  line-height: 1.75;
+  overflow-x: hidden;
+}
+
+/* Header */
+.site-header {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(0,0,0,0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--rule);
+  padding: 0.8rem var(--gap);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.header-name {
+  font-family: var(--mono); font-size: 0.62rem;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--fg); text-decoration: none;
+}
+.header-badge {
+  font-family: var(--mono); font-size: 0.58rem;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted); border: 1px solid var(--rule);
+  padding: 0.2em 0.6em; border-radius: 2px;
+}
+
+/* Hero */
+.hero {
+  padding: clamp(4rem,10vh,8rem) var(--gap) clamp(3rem,6vh,5rem);
+  max-width: 1100px; margin: 0 auto;
+  border-bottom: 1px solid var(--rule);
+}
+.hero-eyebrow {
+  font-family: var(--mono); font-size: 0.62rem;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 1.5rem;
+  display: flex; align-items: center; gap: 0.75rem;
+}
+.hero-eyebrow::before {
+  content: ''; display: block; width: 28px; height: 1px; background: var(--muted);
+}
+.hero-title {
+  font-size: clamp(2.6rem,7vw,5.5rem); font-weight: 200;
+  letter-spacing: -0.03em; line-height: 1.05; margin-bottom: 1.25rem;
+}
+.hero-dates {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 2.5rem;
+}
+.hero-sub {
+  font-size: clamp(0.95rem,2vw,1.15rem); font-weight: 300;
+  color: var(--muted); max-width: 560px; margin-bottom: 2.5rem;
+}
+.hero-meta { display: flex; flex-wrap: wrap; gap: 2rem; }
+.meta-label {
+  font-family: var(--mono); font-size: 0.56rem;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--dim); display: block; margin-bottom: 0.2rem;
+}
+.meta-val { font-size: 0.88rem; font-weight: 400; }
+
+/* Body */
+.body-wrap { max-width: 1100px; margin: 0 auto; padding: 0 var(--gap); }
+
+/* Section */
+.section {
+  padding: clamp(3rem,6vh,5rem) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.section-tag {
+  font-family: var(--mono); font-size: 0.58rem;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--dim); margin-bottom: 0.75rem;
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.section-tag::before {
+  content: attr(data-n);
+  width: 1.5em; height: 1.5em;
+  border: 1px solid var(--dim); border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.52rem;
+}
+.section-heading {
+  font-size: clamp(1.5rem,3.5vw,2.3rem); font-weight: 300;
+  letter-spacing: -0.02em; line-height: 1.2;
+  margin-bottom: 1.1rem; max-width: 720px;
+}
+.section-text {
+  max-width: 700px; color: #aaa;
+  font-size: 0.97rem; line-height: 1.85; margin-bottom: 2rem;
+}
+.section-text p + p { margin-top: 1em; }
+.section-text a { color: var(--fg); }
+
+/* Viewer grid */
+.vgrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem; align-items: start;
+}
+/* =====================================================
+   RESPONSIVE — three tiers
+   Desktop : > 900px
+   Tablet  : 541px – 900px
+   Phone   : ≤ 540px
+===================================================== */
+
+/* Viewer grid — desktop default (defined above) */
+.vgrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem; align-items: start;
+}
+
+/* ── Tablet ── */
+@media (max-width: 900px) {
+  /* Grid: 2 columns, third item centered */
+  .vgrid { grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .vgrid .vblock:nth-child(3) { grid-column: 1 / -1; max-width: 60%; margin: 0 auto; }
+
+  /* Slightly taller viewers so images aren't too squeezed */
+  .osd-viewer { height: 280px; }
+
+  /* Hero title can breathe a little less */
+  .hero-title { letter-spacing: -0.02em; }
+
+  /* Footer: single column on tablet too */
+  .site-footer { grid-template-columns: 1fr; gap: 2rem; }
+}
+
+/* ── Phone ── */
+@media (max-width: 540px) {
+  /* Full single column */
+  .vgrid { grid-template-columns: 1fr; gap: 1.25rem; }
+  .vgrid .vblock:nth-child(3) { grid-column: auto; max-width: 100%; margin: 0; }
+
+  /* Shorter viewers on phone — still usable with touch */
+  .osd-viewer { height: 240px; }
+
+  /* Header: tighten up */
+  .site-header { padding: 0.65rem 1rem; }
+  .header-badge { display: none; } /* hide badge on very small screens */
+
+  /* Hero: compact */
+  .hero { padding: 2.5rem 1rem 2rem; }
+  .hero-eyebrow { font-size: 0.55rem; }
+  .hero-meta { gap: 1.25rem; }
+
+  /* Sections */
+  .body-wrap { padding: 0 1rem; }
+  .section { padding: 2rem 0; }
+  .section-heading { margin-bottom: 0.9rem; }
+  .section-text { font-size: 0.92rem; margin-bottom: 1.5rem; }
+
+  /* Toolbar: shrink text, stack if needed */
+  .vtoolbar { padding: 0.4rem 0.5rem; }
+  .vtoolbar-label { font-size: 0.5rem; }
+  .vtoolbar-link,
+  .fullscreen-btn { font-size: 0.5rem; padding: 0.2em 0.4em; }
+
+  /* Caption */
+  .cap-title { font-size: 0.88rem; }
+  .cap-meta { font-size: 0.54rem; }
+  .cap-desc { font-size: 0.82rem; }
+
+  /* Pullquote */
+  .pullquote { padding: 1.25rem 1.25rem; }
+
+  /* Footer */
+  .site-footer { padding: 2rem 1rem 3rem; gap: 1.5rem; }
+}
+
+/* ── Touch: larger tap targets ── */
+@media (hover: none) and (pointer: coarse) {
+  .vtoolbar-link,
+  .fullscreen-btn { padding: 0.35em 0.7em; }
+  .cap-manifest { padding-bottom: 0.2em; }
+}
+
+/* Viewer block */
+.vtoolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.45rem 0.65rem;
+  background: #111; border: 1px solid rgba(255,255,255,0.07); border-bottom: none;
+}
+.vtoolbar-label {
+  font-family: var(--mono); font-size: 0.55rem;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim);
+  display: flex; align-items: center; gap: 0.4em;
+}
+.vtoolbar-label::before {
+  content: ''; width: 5px; height: 5px;
+  background: var(--muted); border-radius: 50%;
+}
+.vtoolbar-link {
+  font-family: var(--mono); font-size: 0.53rem;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--dim); text-decoration: none;
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 2px;
+  padding: 0.2em 0.5em; transition: color 0.2s, border-color 0.2s;
+}
+.vtoolbar-link:hover { color: var(--fg); border-color: var(--muted); }
+
+.vtoolbar-actions { display: flex; align-items: center; gap: 0.4rem; }
+
+.fullscreen-btn {
+  font-family: var(--mono); font-size: 0.53rem;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--dim); background: none; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 2px;
+  padding: 0.2em 0.5em; transition: color 0.2s, border-color 0.2s;
+  line-height: 1;
+}
+.fullscreen-btn:hover { color: var(--fg); border-color: var(--muted); }
+
+/* Custom OSD navigation controls */
+.osd-controls {
+  position: absolute;
+  bottom: 0.5rem;
+  right: 0.5rem;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: all;
+}
+.osd-btn {
+  width: 26px; height: 26px;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 3px;
+  color: #ccc;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  padding: 0;
+  font-family: var(--sans);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.osd-btn:hover  { background: rgba(255,255,255,0.15); color: #fff; border-color: rgba(255,255,255,0.4); }
+.osd-btn:active { background: rgba(255,255,255,0.25); }
+.osd-btn--home  { font-size: 0.7rem; letter-spacing: -0.02em; }
+.osd-btn--fs    { font-size: 0.75rem; margin-top: 4px; border-color: rgba(255,255,255,0.2); }
+
+/* CSS-simulated fullscreen — works on iOS where Fullscreen API is blocked */
+.viewer-wrapper {
+  position: relative;
+}
+.viewer-wrapper.is-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9998 !important;
+  background: #000;
+}
+.viewer-wrapper.is-fullscreen .osd-viewer {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Exit button — always inside wrapper, only visible when fullscreen */
+.fs-exit-btn {
+  display: none;
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 9999;
+  background: rgba(0,0,0,0.8);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 4px;
+  padding: 0.6em 1.1em;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.fs-exit-btn:hover { background: rgba(255,255,255,0.2); }
+.viewer-wrapper.is-fullscreen .fs-exit-btn { display: block; }
+
+/* Native fullscreen fallback for desktop/Android */
+div:-webkit-full-screen .osd-viewer { width: 100vw !important; height: 100vh !important; }
+div:-moz-full-screen    .osd-viewer { width: 100vw !important; height: 100vh !important; }
+div:fullscreen          .osd-viewer { width: 100vw !important; height: 100vh !important; }
+div:fullscreen          .fs-exit-btn { display: block; }
+div:-webkit-full-screen .fs-exit-btn { display: block; }
+div:-moz-full-screen    .fs-exit-btn { display: block; }
+
+/* Fullscreen state — target the wrapper div */
+div:-webkit-full-screen .osd-viewer { width: 100vw !important; height: 100vh !important; }
+div:-moz-full-screen    .osd-viewer { width: 100vw !important; height: 100vh !important; }
+div:fullscreen          .osd-viewer { width: 100vw !important; height: 100vh !important; }
+
+.osd-viewer {
+  width: 100%; height: 300px;
+  background: var(--vbg);
+  border: 1px solid rgba(255,255,255,0.07);
+  position: relative;
+  touch-action: none; /* lets OSD handle pinch-zoom on touch screens */
+}
+
+.vstatus {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 0.6rem;
+  background: var(--vbg); transition: opacity 0.4s;
+}
+.vstatus.hidden { opacity: 0; pointer-events: none; }
+
+.spinner {
+  width: 20px; height: 20px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-top-color: var(--muted);
+  border-radius: 50%; animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.vstatus-text {
+  font-family: var(--mono); font-size: 0.57rem;
+  letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--dim); text-align: center; max-width: 180px; line-height: 1.8;
+}
+.vstatus-link {
+  font-family: var(--mono); font-size: 0.55rem;
+  color: var(--muted); text-decoration: none;
+  border-bottom: 1px solid var(--rule); margin-top: 0.2rem;
+}
+.vstatus-link:hover { color: var(--fg); }
+
+/* Caption */
+.caption { padding: 0.85rem 0 0.5rem; }
+.cap-title { font-size: 0.95rem; font-weight: 500; margin-bottom: 0.3rem; line-height: 1.35; }
+.cap-meta {
+  font-family: var(--mono); font-size: 0.58rem;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--dim); margin-bottom: 0.5rem;
+  display: flex; flex-wrap: wrap; gap: 0 0.75em;
+}
+.cap-meta span + span::before { content: "·"; margin-right: 0.5em; }
+.cap-desc { font-size: 0.85rem; color: var(--muted); line-height: 1.75; }
+
+
+/* Pullquote */
+.pullquote {
+  padding: 2rem 2.5rem;
+  border-left: 2px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.02);
+}
+.pq-text {
+  font-size: clamp(1.05rem,2vw,1.35rem); font-weight: 300;
+  line-height: 1.6; margin-bottom: 0.75rem;
+}
+.pq-attr {
+  font-family: var(--mono); font-size: 0.58rem;
+  letter-spacing: 0.15em; text-transform: uppercase; color: var(--dim);
+}
+
+/* Divider */
+.divider {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 3rem 0 0; opacity: 0.25;
+}
+.divider-line { flex: 1; height: 1px; background: var(--fg); }
+.divider-mark { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.3em; }
+
+/* Footer */
+.site-footer {
+  max-width: 1100px; margin: 4rem auto 0;
+  padding: 2.5rem var(--gap) 4rem;
+  border-top: 1px solid var(--rule);
+  display: grid; grid-template-columns: 1fr 1fr; gap: 3rem;
+}
+
+.ft-title {
+  font-family: var(--mono); font-size: 0.58rem;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--dim); margin-bottom: 0.75rem;
+}
+.ft-body { font-size: 0.82rem; color: var(--muted); line-height: 1.85; }
+.ft-body code {
+  font-family: var(--mono); font-size: 0.85em; color: #ccc;
+  background: rgba(255,255,255,0.06); padding: 0.1em 0.4em; border-radius: 2px;
+}
+.iiif-badge {
+  display: inline-flex; align-items: center; gap: 0.35em;
+  margin-top: 0.75rem; font-family: var(--mono); font-size: 0.58rem;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--muted); text-decoration: none;
+  border: 1px solid var(--rule); padding: 0.3em 0.7em; border-radius: 2px;
+  transition: border-color 0.2s, color 0.2s;
+}
+.iiif-badge:hover { color: var(--fg); border-color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <a class="header-name" href="https://www.wolfsonian.org" target="_blank">The Wolfsonian–FIU</a>
+  <span class="header-badge">Digital Exhibition &middot; IIIF</span>
+</header>
+
+<div class="hero">
+  <div class="hero-eyebrow">Digital Exhibition IIIF Template | Proof of Concept</div>
+  <h1 class="hero-title">Modern Design Across Borders</h1>
+  <p class="hero-dates">November 20, 2025&ndash;June 28, 2026</p>
+  <div class="hero-meta">
+    <div>
+      <span class="meta-label">Format</span>
+      <span class="meta-val">IIIF &middot; OpenSeadragon</span>
+    </div>
+  </div>
+</div>
+
+<div class="body-wrap">
+
+  <!-- INTRO -->
+  <section class="section">
+    <h2 class="section-heading">Exhibition Overview</h2>
+    <div class="section-text">
+      <p>This digital presentation is an abridged version of the exhibition, featuring selected
+      highlights from the full installation. Visitors are encouraged, when possible, to experience
+      the exhibition in its entirety at the Wolfsonian.</p>
+      <p>Modern Design Across Borders examines the cross-cultural web of connections among people,
+      ideas, and movements that made modern design&rsquo;s remarkable reach and lasting impact
+      possible. Focusing on five spotlight subjects within the global story of interwar
+      design&mdash;transportation, the 1925 Paris Expo, tea and coffee, plywood, and cocktail
+      culture&mdash;the exhibition homes in on the innovation and trends that spread from country
+      to country, expressing progress and new ideals.</p>
+      <p>Featuring products by designers such as Norman Bel Geddes, Josef Hoffmann, Alvar Aalto,
+      and Charles and Ray Eames, Modern Design Across Borders draws mainly from the Wolfsonian
+      collection and teases out the trademark design choices (geometry, clean lines, functionality)
+      that defined novel visual languages of modern life and continue to shape design today.</p>
+      <p>Organized in celebration of The Wolfsonian&rsquo;s 30th anniversary.</p>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════
+    SECTION 1
+    To swap objects: update data-manifest, the toolbar href,
+    and caption__manifest href to your own manifest URLs.
+  ═══════════════════════════════════════════════════════ -->
+  <section class="section">
+    <div class="section-tag" data-n="1">Section</div>
+    <h2 class="section-heading">Streamlining Transportation</h2>
+    <div class="section-text">
+      <p>Ingenious designs for teardrop-shaped cars, trains, and planes entered the scene in
+      the 1930s as symbols of progress and movement. Informed by turn-of-the-century scientific
+      studies of aerodynamics and the 1909 Futurist Manifesto&rsquo;s glorification of the beauty
+      and dynamism of a racing car, designers pursued this fascination with the machine by
+      streamlining the bodies of vehicles to increase speed.</p>
+      <p>Countries showed off their technological advancement through specific models, turning
+      transportation imagery into markers of power in war and in peace. This cult of the machine
+      soon influenced the design of household items, as seen in the Normandie pitcher inspired
+      by the shape of the famous French ocean liner.</p>
+    </div>
+
+    <div class="vgrid">
+
+      <div class="vblock">
+        <div class="vtoolbar">
+          <span class="vtoolbar-label">IIIF Viewer</span>
+          <a class="vtoolbar-link"
+             href="https://digital.wolfsonian.org/node/4812/manifest"
+             target="_blank">&#8599; Manifest</a>
+        </div>
+        <div class="osd-viewer"
+             id="osd-1-1"
+             data-manifest="https://digital.wolfsonian.org/node/4812/manifest">
+          <div class="vstatus" id="vstatus-osd-1-1">
+            <div class="spinner"></div>
+            <div class="vstatus-text">Loading manifest&hellip;</div>
+          </div>
+        </div>
+        <div class="caption">
+          <div class="cap-title">Poster, Magneti Marelli, Licenza Bosch, 1938</div>
+          <div class="cap-meta">
+            <span>Filippo Romoli (Italian, 1901&ndash;1969), designer</span>
+            <span>SAIGA, formerly Barabino &amp; Graeve, Genoa, printer</span>
+            <span>Offset lithograph</span>
+          </div>
+          <div class="cap-desc">This promotional poster shows three automobiles and a motorcycle
+          racing around an electrified spiral track generated by a Magneti Marelli sparkplug.
+          Founded in 1919 in Sesto San Giovanni (near Milan) as a joint venture between Fiat and
+          Ercole Marelli, the company specialized in manufacturing electrical equipment for motor
+          vehicles.<br><br>
+          <span style="font-size:0.8rem;color:var(--dim);">The Wolfsonian&ndash;FIU, The Mitchell
+          Wolfson, Jr. Collection, 87.979.4.1</span></div>
+        </div>
+      </div>
+
+      <div class="vblock">
+        <div class="vtoolbar">
+          <span class="vtoolbar-label">IIIF Viewer</span>
+          <a class="vtoolbar-link"
+             href="https://digital.wolfsonian.org/node/9946/manifest"
+             target="_blank">&#8599; Manifest</a>
+        </div>
+        <div class="osd-viewer"
+             id="osd-1-2"
+             data-manifest="https://digital.wolfsonian.org/node/9946/manifest">
+          <div class="vstatus" id="vstatus-osd-1-2">
+            <div class="spinner"></div>
+            <div class="vstatus-text">Loading manifest&hellip;</div>
+          </div>
+        </div>
+        <div class="caption">
+          <div class="cap-title">Poster, Gorizia Raduno Nazionale Motociclistico al Campi di Battaglia [Gorizia National Motorcycle Rally to the Battlefield], 1939</div>
+          <div class="cap-meta">
+            <span>Bapi (Italian), designer</span>
+            <span>Grafiche Chiesa, Udine, Italy, printer</span>
+            <span>Offset lithograph</span>
+          </div>
+          <div class="cap-desc">In this poster, motorcycles run on a spiral track enveloping
+          the Italian peninsula towards the city of Gorizia, which is symbolized by a photograph
+          of its historic medieval castle. Combining the Futurist myth of movement and speed with
+          the Italian flag&rsquo;s green-white-and-red color scheme, the motorcycles represent the
+          country&rsquo;s developing transportation sector during the Fascist regime.
+          <br><br>
+          The rally was organized by C.O.N.I. (Italian National Olympic Committee) and by O.N.D.
+          (Opera Nazionale Dopolavoro), a recreational association for workers created by the
+          Fascist regime in 1925.
+          <br><br>
+          <span style="font-size:0.8rem;color:var(--dim);">The Wolfsonian&ndash;FIU, The Mitchell
+          Wolfson, Jr. Collection, XX1990.4229</span></div>
+        </div>
+      </div>
+
+      <div class="vblock">
+        <div class="vtoolbar">
+          <span class="vtoolbar-label">IIIF Viewer</span>
+          <a class="vtoolbar-link"
+             href="https://digital.wolfsonian.org/node/2379/manifest"
+             target="_blank">&#8599; Manifest</a>
+        </div>
+        <div class="osd-viewer"
+             id="osd-1-3"
+             data-manifest="https://digital.wolfsonian.org/node/2379/manifest">
+          <div class="vstatus" id="vstatus-osd-1-3">
+            <div class="spinner"></div>
+            <div class="vstatus-text">Loading manifest&hellip;</div>
+          </div>
+        </div>
+        <div class="caption">
+          <div class="cap-title">Poster, Fliegt zur Internationalen Automobil-und Motorrad Ausstellung nach Berlin [Fly to the International Automobile and Motorcycle Fair in Berlin], 1936</div>
+          <div class="cap-meta">
+            <span>Hans Otto Wendt (German, 1911&ndash;1979), designer</span>
+            <span>Deutsche Lufthansa, Berlin, publisher</span>
+            <span>Offset lithograph</span>
+          </div>
+          <div class="cap-desc">This Lufthansa poster promotes flying to Berlin for the city&rsquo;s
+          international motorshow, founded in 1897. Introducing visitors to the latest in
+          aerodynamically-inspired design, the fair became a propaganda platform during the Nazi
+          regime&mdash;Adolf Hitler&rsquo;s totalitarian dictatorship from 1933 to 1945&mdash;to
+          showcase the growing importance of automobiles and motorcycles.
+          <br><br>
+          <span style="font-size:0.8rem;color:var(--dim);">The Wolfsonian&ndash;FIU, The Mitchell
+          Wolfson, Jr. Collection, TD1989.184.37</span></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- SECTION 2 -->
+  <section class="section">
+    <div class="section-tag" data-n="2">Section</div>
+    <h2 class="section-heading">Paris 1925: A Centennial</h2>
+    <div class="section-text">
+      <p>The 1925 Paris Exposition Internationale des Arts D&eacute;coratifs et Industriels
+      Modernes (International Exposition of Modern Decorative and Industrial Arts) was a key
+      venue for introducing and globally disseminating ideas about modern design. With an official
+      invitation to participating nations specifying that no historical styles were allowed, the
+      exposition celebrated a new taste in architecture and decorative arts that had begun to
+      develop in Europe before the First World War&mdash;characterized by geometric ornament,
+      stylized natural elements, and symmetry. This style was later termed Art Deco, after
+      &ldquo;Arts D&eacute;coratifs&rdquo; (in the expo&rsquo;s title), during the 1960s.</p>
+      <p>Present in the fair were competing visions for what defined &ldquo;modern.&rdquo; In
+      contrast with France&rsquo;s decorative luxury pavilions and applied arts, the Pavillon de
+      l&rsquo;Esprit Nouveau by Le Corbusier and Pierre Jeanneret rejected ornament in favor of
+      utility, simplicity, and standardization. Other nations offered additional interpretations
+      of the new style through their pavilions and applied arts that found broad exposure at the
+      widely-attended event.</p>
+    </div>
+
+    <div class="vgrid">
+
+      <div class="vblock">
+        <div class="vtoolbar">
+          <span class="vtoolbar-label">IIIF Viewer</span>
+          <a class="vtoolbar-link"
+             href="https://digital.wolfsonian.org/node/76213/manifest"
+             target="_blank">&#8599; Manifest</a>
+        </div>
+        <div class="osd-viewer"
+             id="osd-2-1"
+             data-manifest="https://digital.wolfsonian.org/node/76213/manifest">
+          <div class="vstatus" id="vstatus-osd-2-1">
+            <div class="spinner"></div>
+            <div class="vstatus-text">Loading manifest&hellip;</div>
+          </div>
+        </div>
+        <div class="caption">
+          <div class="cap-title">Poster design, Paris 1925 Exposition Internationale des Arts D&eacute;coratifs et Industriels Modernes [International Exposition of Modern Decorative and Industrial Arts], 1923</div>
+          <div class="cap-meta">
+            <span>Robert Roquin (French, 1900&ndash;1980), designer</span>
+            <span>Paris</span>
+            <span>Gouache on paper</span>
+          </div>
+          <div class="cap-desc">This image of a woman unveiling a curtain symbolizes the
+          revelation of new artistic and industrial advancements. The design features typical
+          Art Deco motifs: stylized floral ornament, symmetry, bold colors, and exoticism seen
+          in the naked female figure and in the imaginative Islamic Mediterranean architecture.
+          <br><br>
+          <span style="font-size:0.8rem;color:var(--dim);">The Wolfsonian&ndash;FIU, The Mitchell
+          Wolfson, Jr. Collection, XX2017.207</span></div>
+        </div>
+      </div>
+
+      <div class="vblock">
+        <div class="vtoolbar">
+          <span class="vtoolbar-label">IIIF Viewer</span>
+          <a class="vtoolbar-link"
+             href="https://digital.wolfsonian.org/node/7242/manifest"
+             target="_blank">&#8599; Manifest</a>
+        </div>
+        <div class="osd-viewer"
+             id="osd-2-2"
+             data-manifest="https://digital.wolfsonian.org/node/7242/manifest">
+          <div class="vstatus" id="vstatus-osd-2-2">
+            <div class="spinner"></div>
+            <div class="vstatus-text">Loading manifest&hellip;</div>
+          </div>
+        </div>
+        <div class="caption">
+          <div class="cap-title">Plate, Kto ne rabotaet, tot ne ect [Whoever Does Not Work Does Not Eat], 1921</div>
+          <div class="cap-meta">
+            <span>Mikhail M. Adamovich (Russian, 1884&ndash;1947), painter</span>
+            <span>State Porcelain Factory, Petrograd, manufacturer</span>
+            <span>Blank made by the Imperial Porcelain Factory, St. Petersburg, 1892</span>
+            <span>Glazed and painted porcelain</span>
+          </div>
+          <div class="cap-desc">Exhibited in the Soviet pavilion, this plate depicts ration
+          cards, the name &ldquo;Lenin,&rdquo; and the monogram RSFSR (Russian Soviet Federative
+          Socialist Republic) with an Art Deco, stylized floral pattern. A red star with the
+          hammer and sickle blocks out the double-headed eagle of the tzars, a visual symbol of
+          Communism replacing Russia&rsquo;s old world order. The portrait of Soviet president
+          Vladimir Lenin, originally drawn by Ukrainian artist Nathan Altman in 1920 at the
+          Kremlin, was adopted by the State Porcelain Factory for paintings on Soviet propaganda
+          plates and cups.
+          <br><br>
+          <span style="font-size:0.8rem;color:var(--dim);">The Wolfsonian&ndash;FIU, The Mitchell
+          Wolfson, Jr. Collection, XX1990.1337</span></div>
+        </div>
+      </div>
+
+      <div class="vblock">
+        <div class="vtoolbar">
+          <span class="vtoolbar-label">IIIF Viewer</span>
+          <a class="vtoolbar-link"
+             href="https://digital.wolfsonian.org/node/35385/manifest"
+             target="_blank">&#8599; Manifest</a>
+        </div>
+        <div class="osd-viewer"
+             id="osd-2-3"
+             data-manifest="https://digital.wolfsonian.org/node/35385/manifest">
+          <div class="vstatus" id="vstatus-osd-2-3">
+            <div class="spinner"></div>
+            <div class="vstatus-text">Loading manifest&hellip;</div>
+          </div>
+        </div>
+        <div class="caption">
+          <div class="cap-title">Rendering, Pavillon du Printemps. Exposition Internationale Arts D&eacute;coratifs et Industriels de 1925 [Printemps Pavilion. International Exhibition of Modern Decorative and Industrial Arts of 1925], 1925</div>
+          <div class="cap-meta">
+            <span>Henri Sauvage (French, 1873&ndash;1932) and Georges Wybo (French, 1880&ndash;1943), architects</span>
+            <span>Watercolor on paper</span>
+          </div>
+          <div class="cap-desc">Parisian department stores were pioneers in spreading Art Deco,
+          retailing modern decorative arts to consumers as early as the 1910s. Printemps was the
+          first department store to establish an interior decoration studio, Atelier Primavera,
+          which produced furniture and art objects. It was followed by Galeries Lafayette (with
+          La Ma&icirc;trise) and Le Bon March&eacute; (with Atelier Pomone).
+          <br><br>
+          At the Paris Exposition, each department store built its own pavilion to showcase goods.
+          A concrete conical dome decorated with colored glass pebbles by Ren&eacute; Lalique
+          characterized one such structure, the Pavillon du Printemps. According to a 1928 article
+          in the New York magazine <em>The Arts</em>, it was &ldquo;the most striking and
+          commendable.&rdquo;
+          <br><br>
+          <span style="font-size:0.8rem;color:var(--dim);">The Wolfsonian&ndash;FIU, The Mitchell
+          Wolfson, Jr. Collection, 2018.10.29</span></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- SECTION 3 -->
+  <section class="section">
+    <div class="section-tag" data-n="3">Section</div>
+    <h2 class="section-heading">Serving Taste: Coffee and Tea Sets</h2>
+    <div class="section-text">
+      <p>Coffee and tea services helped introduce modern design into daily life. Economic
+      difficulties and social changes brought by the Depression and an emergence of more casual
+      ways of life demanded functional approaches in tableware design. From the elaborate scalloped
+      forms of Josef Hoffmann&rsquo;s Melone coffee service to the pure geometric shapes of
+      Marguerite Friedl&auml;nder-Wildenhain and the midcentury fluidity of Eva Zeisel&rsquo;s
+      Tomorrow&rsquo;s Classic, the evolving lines of these coffee and tea sets reflect an
+      international exchange of ideas between designers, ceramists, and manufacturers.</p>
+      <p>&Eacute;migr&eacute; designers from Europe further fueled the spread, introducing new
+      shapes in American dinnerware and building consumer interest in European products.</p>
+    </div>
+
+    <div class="vgrid">
+
+      <div class="vblock">
+        <div class="vtoolbar">
+          <span class="vtoolbar-label">IIIF Viewer</span>
+          <a class="vtoolbar-link"
+             href="https://digital.wolfsonian.org/node/1340/manifest"
+             target="_blank">&#8599; Manifest</a>
+        </div>
+        <div class="osd-viewer"
+             id="osd-3-1"
+             data-manifest="https://digital.wolfsonian.org/node/1340/manifest">
+          <div class="vstatus" id="vstatus-osd-3-1">
+            <div class="spinner"></div>
+            <div class="vstatus-text">Loading manifest&hellip;</div>
+          </div>
+        </div>
+        <div class="caption">
+          <div class="cap-title">Vase, Ruba Rombic, 1928</div>
+          <div class="cap-meta">
+            <span>Reuben Haley (American, 1872&ndash;1933), designer</span>
+            <span>Consolidated Lamp and Glass Company, Coraopolis, Pennsylvania, manufacturer</span>
+            <span>Glass</span>
+          </div>
+          <div class="cap-desc">In 1925 historicism still pervaded most of American design,
+          and since older styles were not permitted at the Paris Exposition, the United States
+          decided not to participate. Instead, the country sent a commission of experts who,
+          upon their return, urged U.S. producers to develop modern design.
+          <br><br>
+          Designer Reuben Haley reported that his Ruba Rombic mold-blown glassware was inspired
+          by Cubist paintings that he saw at the fair. The line was very successful and was sold
+          in different colors at affordable prices to middle-class consumers in department stores
+          across the U.S.
+          <br><br>
+          <span style="font-size:0.8rem;color:var(--dim);">The Wolfsonian&ndash;FIU, The Mitchell
+          Wolfson, Jr. Collection, 83.8.2</span></div>
+        </div>
+      </div>
+
+      <div class="vblock">
+        <div class="vtoolbar">
+          <span class="vtoolbar-label">IIIF Viewer</span>
+          <a class="vtoolbar-link"
+             href="https://digital.wolfsonian.org/node/81193/manifest"
+             target="_blank">&#8599; Manifest</a>
+        </div>
+        <div class="osd-viewer"
+             id="osd-3-2"
+             data-manifest="https://digital.wolfsonian.org/node/81193/manifest">
+          <div class="vstatus" id="vstatus-osd-3-2">
+            <div class="spinner"></div>
+            <div class="vstatus-text">Loading manifest&hellip;</div>
+          </div>
+        </div>
+        <div class="caption">
+          <div class="cap-title">Coffee and tea service, Hallcraft Tomorrow&rsquo;s Classic, c. 1949</div>
+          <div class="cap-meta">
+            <span>Eva Zeisel (American, b. Hungary, 1906&ndash;2011), designer</span>
+            <span>Hall China Company, East Liverpool, Ohio, manufacturer</span>
+            <span>Glazed earthenware</span>
+          </div>
+          <div class="cap-desc">Eva Zeisel was one of the &eacute;migr&eacute; women designers
+          who played a significant role in developing modern ceramic design in the United States
+          between the 1930s and &rsquo;50s. After gaining experience in workshops and factories
+          in Hungary, Germany, and the Soviet Union, she immigrated to the United States in 1938.
+          Zeisel worked for different companies as a freelance designer, creating a series of
+          whimsical dinnerware with flowing lines and organic forms. Her most successful was the
+          Hallcraft Tomorrow&rsquo;s Classic, promoted as &ldquo;America&rsquo;s fastest selling
+          modern dinnerware&rdquo; soon after its production began in 1952. In this version, she
+          used a black-and-white color scheme.
+          <br><br>
+          <span style="font-size:0.8rem;color:var(--dim);">The Wolfsonian&ndash;FIU, Gift of
+          Charles Venable and Martin Webb, 2021.40.218, .408&ndash;.411, .414</span></div>
+        </div>
+      </div>
+
+      <div class="vblock">
+        <div class="vtoolbar">
+          <span class="vtoolbar-label">IIIF Viewer</span>
+          <a class="vtoolbar-link"
+             href="https://digital.wolfsonian.org/node/24041/manifest"
+             target="_blank">&#8599; Manifest</a>
+        </div>
+        <div class="osd-viewer"
+             id="osd-3-3"
+             data-manifest="https://digital.wolfsonian.org/node/24041/manifest">
+          <div class="vstatus" id="vstatus-osd-3-3">
+            <div class="spinner"></div>
+            <div class="vstatus-text">Loading manifest&hellip;</div>
+          </div>
+        </div>
+        <div class="caption">
+          <div class="cap-title">Design drawing, Gottschlig &Aacute;.RT., c. 1925</div>
+          <div class="cap-meta">
+            <span>J&oacute;zsef Amberg (Hungarian, 1890&ndash;1972)</span>
+            <span>Gouache and graphite on paper</span>
+          </div>
+          <div class="cap-desc">J&oacute;zsef Amberg designed an advertisement and a tea box
+          for Gottschlig &Aacute;goston, a Budapest-based tea wholesaler and producer of cognac
+          and Brazilian rum. The Chinese motifs of the box refer to the origins of tea, a main
+          source of profit during the colonial expansion of the British Empire.
+          <br><br>
+          <span style="font-size:0.8rem;color:var(--dim);">The Wolfsonian&ndash;FIU, The Mitchell
+          Wolfson, Jr. Collection, TD1995.2.296</span></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- SECTION 4 -->
+  <section class="section">
+    <div class="section-tag" data-n="4">Section</div>
+    <h2 class="section-heading">Shaping Plywood</h2>
+    <div class="section-text">
+      <p>Plywood, made up of thin wooden sheets glued together, emerged as a revolutionary
+      material in the late 19th century. Because of its strength, lightness, and flexibility,
+      modernist designers and architects of the 1930s began to exploit its ease of mass production
+      and ability to be shaped into fluid forms. In their designs, they embraced plywood&rsquo;s
+      potential to create seamless, flowing lines&mdash;softening interiors, prioritizing comfort
+      and efficiency, and embodying ideals of simplicity and functionality. Influential
+      manufacturers, like Luterma in Estonia, pioneered plywood&rsquo;s use for everyday products
+      and became widely available and popular through global distribution.</p>
+      <p>Groundbreaking furniture helped make some leading designers familiar names both at home
+      and abroad, from Alvar Aalto in Finland to Charles and Ray Eames in the United States.
+      Several of their iconic chairs are still in production now, and companies continue to explore
+      new birch plywood models, inviting ideas from designers all over the world.</p>
+    </div>
+
+    <div class="vgrid">
+
+      <div class="vblock">
+        <div class="vtoolbar">
+          <span class="vtoolbar-label">IIIF Viewer</span>
+          <a class="vtoolbar-link"
+             href="https://digital.wolfsonian.org/node/24904/manifest"
+             target="_blank">&#8599; Manifest</a>
+        </div>
+        <div class="osd-viewer"
+             id="osd-4-1"
+             data-manifest="https://digital.wolfsonian.org/node/24904/manifest">
+          <div class="vstatus" id="vstatus-osd-4-1">
+            <div class="spinner"></div>
+            <div class="vstatus-text">Loading manifest&hellip;</div>
+          </div>
+        </div>
+        <div class="caption">
+          <div class="cap-title">Lounge chair, model no. 41, Paimio Chair, 1931&ndash;32</div>
+          <div class="cap-meta">
+            <span>Alvar Aalto (Finnish, 1898&ndash;1976), designer</span>
+            <span>Huonekalu-ja Rakennusty&ouml;tehdas Oy Ab, Korhonen factory, Turku, Finland, manufacturer, after 1932</span>
+            <span>Plywood, laminated birch, solid birch</span>
+          </div>
+          <div class="cap-desc">Architect Alvar Aalto began experimenting on laminated wood
+          with master joiner Otto Korhonen, creating the model no. 41 chair. Its alternative
+          name comes from Paimio, Finland, where Aalto designed a tuberculosis sanatorium. He
+          chose these chairs for the patients&rsquo; lounge due to their birch plywood material,
+          a warmer and more tactile alternative to the Bauhaus-style metal used in institutions.
+          He shaped a single piece of plywood into the seat and back of the chair, bending and
+          rolling the wood at the top and bottom edges for structural strength. The chair&rsquo;s
+          fluid form allows for comfort without upholstery.
+          <br><br>
+          <span style="font-size:0.8rem;color:var(--dim);">The Wolfsonian&ndash;FIU, Gift of
+          John C. Waddell, New York City, 2004.1.1</span></div>
+        </div>
+      </div>
+
+      <div class="vblock">
+        <div class="vtoolbar">
+          <span class="vtoolbar-label">IIIF Viewer</span>
+          <a class="vtoolbar-link"
+             href="https://digital.wolfsonian.org/node/82125/manifest"
+             target="_blank">&#8599; Manifest</a>
+        </div>
+        <div class="osd-viewer"
+             id="osd-4-2"
+             data-manifest="https://digital.wolfsonian.org/node/82125/manifest">
+          <div class="vstatus" id="vstatus-osd-4-2">
+            <div class="spinner"></div>
+            <div class="vstatus-text">Loading manifest&hellip;</div>
+          </div>
+        </div>
+        <div class="caption">
+          <div class="cap-title">Stool, 1930&ndash;35</div>
+          <div class="cap-meta">
+            <span>Luterma, Tallin, Estonia, manufacturer</span>
+            <span>Venesta, London, distributor</span>
+            <span>Birch plywood, iron</span>
+          </div>
+          <div class="cap-desc">Light and easy to handle, this stool was made by Luterma,
+          known for their plywood technology, and imported by Venesta&mdash;the name a
+          combination of &ldquo;veneer&rdquo; and &ldquo;Estonia.&rdquo;
+          <br><br>
+          On a future model, German architect Walter Gropius widened the cut-outs. The new
+          version was produced by Isokon Furniture Company, founded in 1929 in London by
+          Venesta employee Jack Pritchard with architect Wells Coates. Isokon hired several
+          &eacute;migr&eacute; designers as consultants, including Gropius and Marcel Breuer.
+          <br><br>
+          <span style="font-size:0.8rem;color:var(--dim);">The Wolfsonian&ndash;FIU, The Mitchell
+          Wolfson, Jr. Collection, 2022.4.1</span></div>
+        </div>
+      </div>
+
+      <div class="vblock">
+        <div class="vtoolbar">
+          <span class="vtoolbar-label">IIIF Viewer</span>
+          <a class="vtoolbar-link"
+             href="https://digital.wolfsonian.org/node/19773/manifest"
+             target="_blank">&#8599; Manifest</a>
+        </div>
+        <div class="osd-viewer"
+             id="osd-4-3"
+             data-manifest="https://digital.wolfsonian.org/node/19773/manifest">
+          <div class="vstatus" id="vstatus-osd-4-3">
+            <div class="spinner"></div>
+            <div class="vstatus-text">Loading manifest&hellip;</div>
+          </div>
+        </div>
+        <div class="caption">
+          <div class="cap-title">Chair, model no. 301, 1932&ndash;34</div>
+          <div class="cap-meta">
+            <span>Marcel Breuer (American, b. Hungary, 1902&ndash;81), designer</span>
+            <span>Embru-Werk A.G., R&uuml;ti, Switzerland for Wohnbedarf, Z&uuml;rich, manufacturer</span>
+            <span>Plywood, aluminum</span>
+          </div>
+          <div class="cap-desc">In 1933 Embru-Werk A.G. began producing furniture designed by
+          Marcel Breuer, a student and later an instructor at Bauhaus, the design school founded
+          in Weimar, Germany by architect Walter Gropius in 1919. Breuer pioneered the use of
+          tubular steel for home furnishings beginning in the 1920s. He originally conceived
+          model no. 301 as a cantilever form with no rear supports, however a secondary support
+          strut (patented in 1933) became necessary when the aluminum bands proved too weak to
+          support the weight of a sitter.
+          <br><br>
+          <span style="font-size:0.8rem;color:var(--dim);">The Wolfsonian&ndash;FIU, The Mitchell
+          Wolfson, Jr. Collection, TD1993.81.2</span></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- SECTION 5 — Cocktail Culture -->
+  <section class="section">
+    <div class="section-tag" data-n="5">Section</div>
+    <h2 class="section-heading">Cocktail Culture</h2>
+    <div class="section-text">
+      <p>Cocktail culture was a staple of the 1920s &ldquo;Jazz Age&rdquo; despite the United
+      States banning the production, importation, transportation, and sale of alcoholic beverages
+      between 1920 and 1933, a period called Prohibition. With the help of advanced manufacturing
+      technologies and materials such as Bakelite and chromed metals, designers conceived products
+      characterized by simple geometric shapes, rounded edges, and continuous lines that not only
+      facilitated mass production, but also aligned with the emerging visual language of modern
+      design.</p>
+      <p>Their output contributed to a global exchange of taste, customs, and drinks, fueled by
+      a common practice among many companies (such as liquor brands) to invite the most fashionable
+      graphic designers of the time, sometimes from abroad, to lead new advertising campaigns.
+      Shaped by these cross-cultural influences, many tools for cocktail making became emblems of
+      American streamlined design.</p>
+    </div>
+
+    <div class="vgrid">
+
+      <div class="vblock">
+        <div class="vtoolbar">
+          <span class="vtoolbar-label">IIIF Viewer</span>
+          <a class="vtoolbar-link"
+             href="https://digital.wolfsonian.org/node/81350/manifest"
+             target="_blank">&#8599; Manifest</a>
+        </div>
+        <div class="osd-viewer"
+             id="osd-5-1"
+             data-manifest="https://digital.wolfsonian.org/node/81350/manifest">
+          <div class="vstatus" id="vstatus-osd-5-1">
+            <div class="spinner"></div>
+            <div class="vstatus-text">Loading manifest&hellip;</div>
+          </div>
+        </div>
+        <div class="caption">
+          <div class="cap-title">Shaker, Empire Cocktail Shaker, 1938</div>
+          <div class="cap-meta">
+            <span>William Archibald Welden (American, b. Scotland, 1900&ndash;1970), designer</span>
+            <span>Revere Copper and Brass Company, Rome, New York, manufacturer</span>
+            <span>Chrome plated brass, Bakelite</span>
+          </div>
+          <div class="cap-desc">William Archibald Welden, head of design for the Revere Copper
+          and Brass Company in the 1930s, designed the Empire Cocktail Shaker with butterscotch
+          Bakelite accents on the cylindrical finial and stopper. Other variations include red,
+          green, and white Bakelite. The shaker could be sold as a set, accompanied by
+          chrome-plated brass cups with a Bakelite base complementing the highlights of the shaker.
+          <br><br>
+          <span style="font-size:0.8rem;color:var(--dim);">The Wolfsonian&ndash;FIU, Gift from the
+          Martin K. Webb and Charles L. Venable Collection, 2021.40.380 a-c</span></div>
+        </div>
+      </div>
+
+      <div class="vblock">
+        <div class="vtoolbar">
+          <span class="vtoolbar-label">IIIF Viewer</span>
+          <a class="vtoolbar-link"
+             href="https://digital.wolfsonian.org/node/4763/manifest"
+             target="_blank">&#8599; Manifest</a>
+        </div>
+        <div class="osd-viewer"
+             id="osd-5-2"
+             data-manifest="https://digital.wolfsonian.org/node/4763/manifest">
+          <div class="vstatus" id="vstatus-osd-5-2">
+            <div class="spinner"></div>
+            <div class="vstatus-text">Loading manifest&hellip;</div>
+          </div>
+        </div>
+        <div class="caption">
+          <div class="cap-title">Cocktail spoon with graduated jigger, c. 1935</div>
+          <div class="cap-meta">
+            <span>Napier Co., Meriden, Connecticut, manufacturer</span>
+            <span>Silver-plated brass</span>
+          </div>
+          <div class="cap-desc">Influenced by the market created by the end of Prohibition, in
+          the 1930s Napier Co. began producing barware such as this cocktail spoon and graduated
+          jigger, which guides the user in measuring ingredients. When pressed, the mechanical
+          design allows for the liquid in the jigger to make its way down the spoon and into
+          the glass.
+          <br><br>
+          James Napier, president of the company since 1920, visited the Paris Exposition
+          Internationale des Arts D&eacute;coratifs in 1925 and kept Napier Co. up to date with
+          new trends in the years to follow.
+          <br><br>
+          <span style="font-size:0.8rem;color:var(--dim);">The Wolfsonian&ndash;FIU, The Mitchell
+          Wolfson, Jr. Collection, 83.15.18</span></div>
+        </div>
+      </div>
+
+      <div class="vblock">
+        <div class="vtoolbar">
+          <span class="vtoolbar-label">IIIF Viewer</span>
+          <a class="vtoolbar-link"
+             href="https://digital.wolfsonian.org/node/2722/manifest"
+             target="_blank">&#8599; Manifest</a>
+        </div>
+        <div class="osd-viewer"
+             id="osd-5-3"
+             data-manifest="https://digital.wolfsonian.org/node/2722/manifest">
+          <div class="vstatus" id="vstatus-osd-5-3">
+            <div class="spinner"></div>
+            <div class="vstatus-text">Loading manifest&hellip;</div>
+          </div>
+        </div>
+        <div class="caption">
+          <div class="cap-title">Poster, Fap&rsquo;Anis, c. 1927</div>
+          <div class="cap-meta">
+            <span>Henri Delval (French, 1901&ndash;1959), designer</span>
+            <span>Publicit&eacute; Wall, Paris, printer</span>
+            <span>Offset lithograph</span>
+          </div>
+          <div class="cap-desc">This poster promotes Fap&rsquo;Anis&mdash;an anise-based
+          ap&eacute;ritif&mdash;as a drink &ldquo;for connoisseurs.&rdquo; It depicts dancer,
+          singer, and actress Gaby Deslys drinking and enjoying a panoramic view of the French
+          Riviera, using bold color and stylized forms typical of French Art Deco advertising
+          design. Posters like these were key marketing tools in the interwar period, displayed
+          in caf&eacute;s and along urban streets to attract attention in a competitive beverage
+          market.
+          <br><br>
+          <span style="font-size:0.8rem;color:var(--dim);">The Wolfsonian&ndash;FIU, The Mitchell
+          Wolfson, Jr. Collection, TD1989.280.1</span></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- CLOSING -->
+  <section class="section">
+    <h2 class="section-heading">Wolfsonian Labs</h2>
+    <div class="section-text">
+      <p>This project is part of the Wolfsonian Labs where museum staff and FIU faculty and
+      students are experimenting with new ways to tell the stories about our collections.
+      These projects serve as proof of concept&mdash;allowing the museum to test ideas, refine
+      approaches, and scale successful experiments for future visitor experiences.</p>
+    </div>
+  </section>
+
+  <div class="divider">
+    <div class="divider-line"></div>
+    <span class="divider-mark">&mdash; &mdash;</span>
+    <div class="divider-line"></div>
+  </div>
+
+</div><!-- /body-wrap -->
+
+<footer class="site-footer">
+  <div>
+    <div class="ft-title">About this framework</div>
+    <div class="ft-body">
+      This exhibition is built on the <a href="https://iiif.io" target="_blank" style="color:var(--muted);text-decoration:underline;">IIIF Presentation API</a> (versions 2 &amp; 3), an open standard that allows cultural institutions to share and display digital collection objects interoperably. Each viewer uses <a href="https://openseadragon.github.io" target="_blank" style="color:var(--muted);text-decoration:underline;">OpenSeadragon 4.1</a> to deliver deep-zoom, tile-based image rendering directly from Wolfsonian collection manifests.
+      <br><br>
+      The template is a single HTML file requiring no build tools or server-side code. New sections can be added by duplicating any existing section block and updating the <code>data-manifest</code> attribute with a valid IIIF manifest URL alongside the caption text.
+      <br><br>
+      <a class="iiif-badge" href="https://iiif.io" target="_blank">&#10022; IIIF Compliant</a>
+    </div>
+  </div>
+  <div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  function getTileSource(manifest) {
+    var isV2 = false;
+    var ctx = manifest["@context"] || "";
+    if (typeof ctx === "string") {
+      isV2 = ctx.indexOf("presentation/2") !== -1;
+    } else if (Array.isArray(ctx)) {
+      for (var i = 0; i < ctx.length; i++) {
+        if (typeof ctx[i] === "string" && ctx[i].indexOf("presentation/2") !== -1) {
+          isV2 = true;
+          break;
+        }
+      }
+    }
+    if (manifest["@type"] === "sc:Manifest") {
+      isV2 = true;
+    }
+
+    if (isV2) {
+      var seqs = manifest.sequences;
+      if (!seqs || !seqs[0] || !seqs[0].canvases || !seqs[0].canvases[0]) { return null; }
+      var imgs = seqs[0].canvases[0].images;
+      if (!imgs || !imgs[0] || !imgs[0].resource) { return null; }
+      var res = imgs[0].resource;
+      var svc = res.service;
+      if (svc) {
+        var sid = svc["@id"] || svc.id;
+        if (!sid && Array.isArray(svc) && svc[0]) {
+          sid = svc[0]["@id"] || svc[0].id;
+        }
+        if (sid) { return sid.replace(/\/$/, "") + "/info.json"; }
+      }
+      var rid = res["@id"] || res.id;
+      if (rid) { return rid; }
+      return null;
+    }
+
+    var items = manifest.items;
+    if (!items || !items[0]) { return null; }
+    var canvasItems = items[0].items;
+    if (!canvasItems || !canvasItems[0]) { return null; }
+    var annItems = canvasItems[0].items;
+    if (!annItems || !annItems[0]) { return null; }
+    var body = annItems[0].body;
+    if (!body) { return null; }
+    var services = body.service;
+    if (services) {
+      if (!Array.isArray(services)) { services = [services]; }
+      var s0 = services[0];
+      if (s0) {
+        var s0id = s0.id || s0["@id"];
+        if (s0id) { return s0id.replace(/\/$/, "") + "/info.json"; }
+      }
+    }
+    var bid = body.id || body["@id"];
+    if (bid) { return bid; }
+    return null;
+  }
+
+  function showError(statusEl, manifestUrl, msg) {
+    var spinner = statusEl.querySelector(".spinner");
+    var text = statusEl.querySelector(".vstatus-text");
+    if (spinner) { spinner.style.display = "none"; }
+    if (text) { text.textContent = msg; }
+    var link = document.createElement("a");
+    link.href = manifestUrl;
+    link.target = "_blank";
+    link.className = "vstatus-link";
+    link.textContent = "Open manifest directly";
+    statusEl.appendChild(link);
+  }
+
+  function initViewer(el) {
+    var manifestUrl = el.getAttribute("data-manifest");
+    var elId = el.id;
+    var statusEl = document.getElementById("vstatus-" + elId);
+
+    // Always wrap viewer and inject controls, regardless of manifest state
+    var wrapper = document.createElement("div");
+    wrapper.style.position = "relative";
+    el.parentNode.insertBefore(wrapper, el);
+    wrapper.appendChild(el);
+
+    // Always wrap viewer in a named class for CSS targeting
+    wrapper.className = "viewer-wrapper";
+
+    var controls = document.createElement("div");
+    controls.className = "osd-controls";
+
+    var btnZoomIn  = document.createElement("button");
+    btnZoomIn.className = "osd-btn";
+    btnZoomIn.title     = "Zoom in";
+    btnZoomIn.innerHTML = "&#43;";
+
+    var btnZoomOut = document.createElement("button");
+    btnZoomOut.className = "osd-btn";
+    btnZoomOut.title     = "Zoom out";
+    btnZoomOut.innerHTML = "&#8722;";
+
+    var btnHome = document.createElement("button");
+    btnHome.className    = "osd-btn osd-btn--home";
+    btnHome.title        = "Reset view";
+    btnHome.innerHTML    = "&#8962;";
+
+    controls.appendChild(btnZoomIn);
+    controls.appendChild(btnZoomOut);
+    controls.appendChild(btnHome);
+
+    var btnFS = document.createElement("button");
+    btnFS.className   = "osd-btn osd-btn--fs";
+    btnFS.title       = "Fullscreen";
+    btnFS.innerHTML   = "&#x26F6;";
+    btnFS.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var supportsFS = !!(document.documentElement.requestFullscreen ||
+                          document.documentElement.webkitRequestFullscreen ||
+                          document.documentElement.mozRequestFullScreen);
+      if (supportsFS) {
+        // Desktop / Android: use native Fullscreen API
+        if (wrapper.requestFullscreen) {
+          wrapper.requestFullscreen();
+        } else if (wrapper.webkitRequestFullscreen) {
+          wrapper.webkitRequestFullscreen();
+        } else if (wrapper.mozRequestFullScreen) {
+          wrapper.mozRequestFullScreen();
+        }
+      } else {
+        // iOS Safari: CSS-simulated fullscreen
+        wrapper.classList.add("is-fullscreen");
+        document.body.style.overflow = "hidden";
+      }
+    });
+    controls.appendChild(btnFS);
+
+    // Exit button — works for both native and CSS fullscreen
+    var exitBtn = document.createElement("button");
+    exitBtn.className = "fs-exit-btn";
+    exitBtn.innerHTML = "&#10005; Exit fullscreen";
+    exitBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      // CSS simulated exit
+      wrapper.classList.remove("is-fullscreen");
+      document.body.style.overflow = "";
+      // Native API exit (desktop/Android)
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      } else if (document.mozCancelFullScreen) {
+        document.mozCancelFullScreen();
+      }
+    });
+    wrapper.appendChild(exitBtn);
+    wrapper.appendChild(controls);
+
+    if (!manifestUrl) {
+      if (statusEl) { showError(statusEl, "", "No manifest URL configured"); }
+      return;
+    }
+
+    fetch(manifestUrl)
+      .then(function (res) {
+        if (!res.ok) { throw new Error("HTTP " + res.status); }
+        return res.json();
+      })
+      .then(function (manifest) {
+        var tileSource = getTileSource(manifest);
+        if (!tileSource) { throw new Error("No image source in manifest"); }
+        if (statusEl) { statusEl.classList.add("hidden"); }
+
+        var osd = OpenSeadragon({
+          element: el,
+          tileSources: [tileSource],
+          showNavigationControl: false,
+          showFullPageControl: false,
+          showRotationControl: false,
+          defaultZoomLevel: 0,
+          visibilityRatio: 0.8
+        });
+
+        // Wire buttons directly to viewport after OSD is ready
+        osd.addHandler("open", function () {
+          btnZoomIn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            osd.viewport.zoomBy(1.5);
+            osd.viewport.applyConstraints();
+          });
+          btnZoomOut.addEventListener("click", function (e) {
+            e.stopPropagation();
+            osd.viewport.zoomBy(0.67);
+            osd.viewport.applyConstraints();
+          });
+          btnHome.addEventListener("click", function (e) {
+            e.stopPropagation();
+            osd.viewport.goHome();
+          });
+        });
+      })
+      .catch(function (err) {
+        console.warn("Viewer [" + elId + "] failed:", err.message);
+        if (statusEl) {
+          var msg = window.location.protocol === "file:"
+            ? "Serve via localhost to load images"
+            : "Could not load manifest";
+          showError(statusEl, manifestUrl, msg);
+        }
+      });
+  }
+
+  function initAll() {
+    var els = document.querySelectorAll(".osd-viewer[data-manifest]");
+    for (var i = 0; i < els.length; i++) {
+      initViewer(els[i]);
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initAll);
+  } else {
+    initAll();
+  }
+}());
+</script>
+
+</body>
+</html>
